@@ -26,7 +26,7 @@
 
 import UIKit
 
-fileprivate class MemoryStorageItem {
+fileprivate class MemoryStorageItem: NSObject {
     var prev: MemoryStorageItem?
     var next: MemoryStorageItem?
     
@@ -34,33 +34,101 @@ fileprivate class MemoryStorageItem {
     var value: Any
     
     var cost: UInt = 0
-    var time: TimeInterval = CACurrentMediaTime()
+    var time: TimeInterval = 0.0
     
     init(key: String, value: Any) {
         self.key = key
         self.value = value
     }
     
-    deinit {
-        
-    }
+    deinit {}
 }
 
-
-public struct MemoryStorage {
+fileprivate class MemoryStorage: NSObject {
+    
     var dict = [String: MemoryStorageItem]()
-    var totalCost = 0
-    var totalCount = 0
+    var totalCost: UInt = 0
+    var totalCount: UInt = 0
     var head: MemoryStorageItem?
     var tail: MemoryStorageItem?
-    var releaseOnMainThread: Bool = false
-    var releaseAsynchronously: Bool = true
+ 
+    func insert(atHead item: MemoryStorageItem) {
+        dict[item.key] = item
+        totalCost += item.cost
+        totalCount += 1
+        
+        if head != nil {
+            item.next = head
+            head!.prev = item
+            head = item
+        } else {
+            head = item
+            tail = item
+        }
+    }
     
+    func bring(toHead item: MemoryStorageItem) {
+        if head == item {
+            return
+        }
+        if tail == item {
+            tail = item.prev
+            tail!.next = nil
+        } else {
+            item.next!.prev = item.prev
+            item.prev!.next = item.next
+        }
+        item.next = head
+        item.prev = nil
+        head!.prev = item
+        head = item
+    }
     
+    func remove(item: MemoryStorageItem) {
+        dict[item.key] = nil
+        totalCost = item.cost
+        totalCount -= 1
+        if item.next != nil {
+            item.next!.prev = item.prev
+        }
+        if item.prev != nil {
+            item.prev!.next = item.next
+        }
+        if head == item {
+            head = item.next
+        }
+        if tail == item {
+            tail = item.prev
+        }
+    }
     
+    func removeTail() -> MemoryStorageItem? {
+        if tail == nil {
+            return nil
+        }
+        let v = tail
+        dict[tail!.key] = nil
+        totalCost -= tail!.cost
+        totalCount -= 1
+        if head == tail {
+            head = nil
+            tail = nil
+        } else {
+            tail = tail!.prev
+            tail!.next = nil
+        }
+        
+        return v
+    }
     
+    func removeAll() {
+        totalCost = 0
+        totalCount = 0
+        head = nil
+        tail = nil
+        dict = [String: MemoryStorageItem]()
+    }
     
-
 }
 
 
@@ -71,12 +139,12 @@ public class MemoryCache: NSObject {
     fileprivate static let globalSerialQueue = DispatchQueue.global(qos: DispatchQoS.QoSClass.background)
     
     fileprivate var lock = UnsafeMutablePointer<pthread_mutex_t>.allocate(capacity: 1)
-    fileprivate var linkedMap = LinkedMap.init()
-    fileprivate var queue = DispatchQueue.init(label: "com.eggswift.cache.memory")
+    fileprivate var storage = MemoryStorage()
+    fileprivate var queue = DispatchQueue(label: "com.eggswift.cache.memory")
     
     public let name: String
     
-    public var countLimit: UInt = UInt.max
+    public var countLimit: UInt = 1000
     public var costLimit: UInt = UInt.max
     public var ageLimit: TimeInterval = Double.greatestFiniteMagnitude
     public var autoTrimInterval: TimeInterval = 5.0
@@ -86,10 +154,6 @@ public class MemoryCache: NSObject {
     
     public var didReceiveMemoryWarningBlock: MemoryCacheEscapeHandler?
     public var didEnterBackgroundBlock: MemoryCacheEscapeHandler?
-    
-    public var releaseOnMainThread: Bool = false
-    public var releaseAsynchronously: Bool = true
-    
     
     public init(name: String = "<no description>") {
         self.name = name
@@ -107,7 +171,7 @@ public class MemoryCache: NSObject {
     deinit {
         NotificationCenter.default.removeObserver(self, name: .UIApplicationDidReceiveMemoryWarning, object: nil)
         NotificationCenter.default.removeObserver(self, name: .UIApplicationDidEnterBackground, object: nil)
-        linkedMap.removeAll()
+        storage.removeAll()
         pthread_mutex_destroy(lock)
         lock.deinitialize()
         lock.deallocate(capacity: 1)
@@ -119,8 +183,8 @@ public class MemoryCache: NSObject {
         }
         
         pthread_mutex_lock(lock)
-        let contains = linkedMap.dic.contains { (k: String, v: LinkedMapNode?) -> Bool in
-           return k == key
+        let contains = storage.dict.contains { (k, v) -> Bool in
+            return k == key
         }
         pthread_mutex_unlock(lock)
         
@@ -133,11 +197,11 @@ public class MemoryCache: NSObject {
         }
         
         pthread_mutex_lock(lock)
-        var object: Any? = nil
-        if var node = linkedMap.dic[key] {
-            node.time = CACurrentMediaTime()
-            linkedMap.bring(itemToHead: node)
-            object = node.value
+        var object: Any?
+        if let item = storage.dict[key] {
+            item.time = CACurrentMediaTime()
+            storage.bring(toHead: item)
+            object = item.value
         }
         pthread_mutex_unlock(lock)
         
@@ -146,7 +210,43 @@ public class MemoryCache: NSObject {
     
     
     public func set(object: Any?, forKey key: String, withCost cost: UInt = 0) {
+        guard key.characters.count > 0 else {
+            return
+        }
+        guard let object = object else {
+            remove(forKey: key)
+            return
+        }
         
+        pthread_mutex_lock(lock)
+        if let item = storage.dict[key] {
+            storage.totalCost -= item.cost
+            storage.totalCost += cost
+            item.cost = cost
+            item.time = CACurrentMediaTime()
+            item.value = object
+            storage.bring(toHead: item)
+        } else {
+            let item = MemoryStorageItem.init(key: key, value: object)
+            item.cost = cost
+            item.time = CACurrentMediaTime()
+            storage.insert(atHead: item)
+        }
+        
+        if storage.totalCost > costLimit {
+            queue.async { [weak self] in
+                guard let weakSelf = self else {
+                    return
+                }
+                weakSelf.trim(toCost: weakSelf.costLimit)
+            }
+        }
+        
+        if storage.totalCount > countLimit {
+            let _ = storage.removeTail()
+        }
+        
+        pthread_mutex_unlock(lock)
     }
     
     
@@ -156,11 +256,8 @@ public class MemoryCache: NSObject {
         }
 
         pthread_mutex_lock(lock)
-        if var node = linkedMap.dic[key] {
-            linkedMap.remove(item: node)
-            if linkedMap. {
-                <#code#>
-            }
+        if let item = storage.dict[key] {
+            storage.remove(item: item)
         }
         
         pthread_mutex_unlock(lock)
@@ -168,7 +265,7 @@ public class MemoryCache: NSObject {
 
     public func removeAll() {
         pthread_mutex_lock(lock)
-        linkedMap.removeAll()
+        storage.removeAll()
         pthread_mutex_unlock(lock)
     }
     
@@ -194,14 +291,14 @@ public class MemoryCache: NSObject {
     
     public func totalCount() -> UInt {
         pthread_mutex_lock(lock)
-        let totalCount = linkedMap.totalCount
+        let totalCount = storage.totalCount
         pthread_mutex_unlock(lock)
         return totalCount
     }
     
     public func totalCost() -> UInt {
         pthread_mutex_lock(lock)
-        let totalCost = linkedMap.totalCost
+        let totalCost = storage.totalCost
         pthread_mutex_unlock(lock)
         return totalCost
     }
@@ -234,35 +331,26 @@ public class MemoryCache: NSObject {
         var finish = false
         pthread_mutex_lock(lock)
         if costLimit == 0 {
-            linkedMap.removeAll()
+            storage.removeAll()
             finish = true
         }
-        else if linkedMap.totalCost <= costLimit {
+        else if storage.totalCost <= costLimit {
             finish = true
         }
         pthread_mutex_unlock(lock)
         
         if finish { return }
         
-        var holder = [LinkedMapNode].init()
         while !finish {
             if pthread_mutex_trylock(lock) == 0 {
-                if linkedMap.totalCost > costLimit {
-                    if let node = linkedMap.remove() {
-                        holder.append(node)
-                    }
+                if storage.totalCost > costLimit {
+                    let _ = storage.removeTail()
                 } else {
                     finish = true
                 }
                 pthread_mutex_unlock(lock)
             } else {
                 usleep(10 * 1000)
-            }
-        }
-        
-        if holder.count > 0 {
-            (releaseOnMainThread ? DispatchQueue.main : Memory.queue).async {
-                let _ = holder.count // release in queue
             }
         }
     }
@@ -271,35 +359,26 @@ public class MemoryCache: NSObject {
         var finish = false
         pthread_mutex_lock(lock)
         if countLimit == 0 {
-            linkedMap.removeAll()
+            storage.removeAll()
             finish = true
         }
-        else if linkedMap.totalCount <= countLimit {
+        else if storage.totalCount <= countLimit {
             finish = true
         }
         pthread_mutex_unlock(lock)
         
         if finish { return }
         
-        var holder = [LinkedMapNode].init()
         while !finish {
             if pthread_mutex_trylock(lock) == 0 {
-                if linkedMap.totalCount > countLimit {
-                    if let node = linkedMap.remove() {
-                        holder.append(node)
-                    }
+                if storage.totalCount > countLimit {
+                    let _ = storage.removeTail()
                 } else {
                     finish = true
                 }
                 pthread_mutex_unlock(lock)
             } else {
                 usleep(10 * 1000)
-            }
-        }
-        
-        if holder.count > 0 {
-            (releaseOnMainThread ? DispatchQueue.main : Memory.queue).async {
-                let _ = holder.count // release in queue
             }
         }
     }
@@ -310,11 +389,11 @@ public class MemoryCache: NSObject {
         pthread_mutex_lock(lock)
         
         if ageLimit <= 0.0 {
-            linkedMap.removeAll()
+            storage.removeAll()
             finish = true
         } else {
-            if let lastNode = linkedMap.last() {
-                if (now - lastNode.time) <= ageLimit {
+            if let last = storage.tail {
+                if (now - last.time) <= ageLimit {
                     finish = true
                 }
             } else {
@@ -326,13 +405,10 @@ public class MemoryCache: NSObject {
         
         if finish { return }
         
-        var holder = [LinkedMapNode].init()
         while !finish {
             if pthread_mutex_trylock(lock) == 0 {
-                if let lastNode = linkedMap.last(), (now - lastNode.time) > ageLimit {
-                    if let node = linkedMap.remove() {
-                        holder.append(node)
-                    }
+                if let last = storage.tail, (now - last.time) > ageLimit {
+                    let _ = storage.removeTail()
                 } else {
                     finish = true
                 }
@@ -341,15 +417,7 @@ public class MemoryCache: NSObject {
                 usleep(10 * 1000)
             }
         }
-        
-        if holder.count > 0 {
-            (releaseOnMainThread ? DispatchQueue.main : Memory.queue).async {
-                let _ = holder.count // release in queue
-            }
-        }
-    
     }
-    
     
     // MARK: - Notification
     
@@ -371,6 +439,4 @@ public class MemoryCache: NSObject {
         }
     }
 
-    
-    
 }
