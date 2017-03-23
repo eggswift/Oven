@@ -26,17 +26,17 @@
 
 import UIKit
 
-fileprivate class MemoryStorageItem: NSObject {
-    var prev: MemoryStorageItem?
-    var next: MemoryStorageItem?
+fileprivate class MemoryStorageItem<KeyType: Equatable>: NSObject {
+    var prev: MemoryStorageItem<KeyType>?
+    var next: MemoryStorageItem<KeyType>?
     
-    var key: String
+    var key: KeyType
     var value: Any
     
     var cost: UInt = 0
     var time: TimeInterval = 0.0
     
-    init(key: String, value: Any) {
+    init(key: KeyType, value: Any) {
         self.key = key
         self.value = value
     }
@@ -44,15 +44,15 @@ fileprivate class MemoryStorageItem: NSObject {
     deinit {}
 }
 
-fileprivate class MemoryStorage: NSObject {
+fileprivate class MemoryStorage<KeyType : Hashable>: NSObject {
     
-    var dict = [String: MemoryStorageItem]()
+    var dict = [KeyType: MemoryStorageItem<KeyType>]()
     var totalCost: UInt = 0
     var totalCount: UInt = 0
-    var head: MemoryStorageItem?
-    var tail: MemoryStorageItem?
+    var head: MemoryStorageItem<KeyType>?
+    var tail: MemoryStorageItem<KeyType>?
  
-    func insert(atHead item: MemoryStorageItem) {
+    func insert(atHead item: MemoryStorageItem<KeyType>) {
         dict[item.key] = item
         totalCost += item.cost
         totalCount += 1
@@ -67,7 +67,7 @@ fileprivate class MemoryStorage: NSObject {
         }
     }
     
-    func bring(toHead item: MemoryStorageItem) {
+    func bring(toHead item: MemoryStorageItem<KeyType>) {
         if head == item {
             return
         }
@@ -84,7 +84,7 @@ fileprivate class MemoryStorage: NSObject {
         head = item
     }
     
-    func remove(item: MemoryStorageItem) {
+    func remove(item: MemoryStorageItem<KeyType>) {
         dict[item.key] = nil
         totalCost = item.cost
         totalCount -= 1
@@ -102,7 +102,7 @@ fileprivate class MemoryStorage: NSObject {
         }
     }
     
-    func removeTail() -> MemoryStorageItem? {
+    func removeTail() -> MemoryStorageItem<KeyType>? {
         if tail == nil {
             return nil
         }
@@ -126,20 +126,18 @@ fileprivate class MemoryStorage: NSObject {
         totalCount = 0
         head = nil
         tail = nil
-        dict = [String: MemoryStorageItem]()
+        dict = [KeyType: MemoryStorageItem]()
     }
     
 }
 
 
-public typealias MemoryCacheEscapeHandler = ((_ : MemoryCache) -> ())
+public typealias MemoryCacheEscapeHandler<KeyType : Hashable> = ((_ : MemoryCache<KeyType>) -> ())
 
-public class MemoryCache: NSObject {
-
-    fileprivate static let globalSerialQueue = DispatchQueue.global(qos: DispatchQoS.QoSClass.background)
+public class MemoryCache <KeyType : Hashable>: NSObject {
     
     fileprivate var lock = UnsafeMutablePointer<pthread_mutex_t>.allocate(capacity: 1)
-    fileprivate var storage = MemoryStorage()
+    fileprivate var storage = MemoryStorage<KeyType>()
     fileprivate var queue = DispatchQueue(label: "com.eggswift.cache.memory")
     
     public let name: String
@@ -152,8 +150,8 @@ public class MemoryCache: NSObject {
     public var shouldRemoveAllObjectsOnMemoryWarning: Bool = true
     public var shouldRemoveAllObjectsWhenEnteringBackground: Bool = true
     
-    public var didReceiveMemoryWarningBlock: MemoryCacheEscapeHandler?
-    public var didEnterBackgroundBlock: MemoryCacheEscapeHandler?
+    public var didReceiveMemoryWarningBlock: MemoryCacheEscapeHandler<KeyType>?
+    public var didEnterBackgroundBlock: MemoryCacheEscapeHandler<KeyType>?
     
     public init(name: String = "<no description>") {
         self.name = name
@@ -177,11 +175,7 @@ public class MemoryCache: NSObject {
         lock.deallocate(capacity: 1)
     }
     
-    public func contains(forKey key: String) -> Bool {
-        guard key.characters.count > 0 else {
-            return false
-        }
-        
+    public func contains(forKey key: KeyType) -> Bool {
         pthread_mutex_lock(lock)
         let contains = storage.dict.contains { (k, v) -> Bool in
             return k == key
@@ -191,11 +185,7 @@ public class MemoryCache: NSObject {
         return contains
     }
     
-    public func object(forKey key: String) -> Any? {
-        guard key.characters.count > 0 else {
-            return false
-        }
-        
+    public func object(forKey key: KeyType) -> Any? {
         pthread_mutex_lock(lock)
         var object: Any?
         if let item = storage.dict[key] {
@@ -209,10 +199,7 @@ public class MemoryCache: NSObject {
     }
     
     
-    public func set(object: Any?, forKey key: String, withCost cost: UInt = 0) {
-        guard key.characters.count > 0 else {
-            return
-        }
+    public func set(object: Any?, forKey key: KeyType, withCost cost: UInt = 0) {
         guard let object = object else {
             remove(forKey: key)
             return
@@ -250,11 +237,7 @@ public class MemoryCache: NSObject {
     }
     
     
-    public func remove(forKey key: String) {
-        guard key.characters.count > 0 else {
-            return
-        }
-
+    public func remove(forKey key: KeyType) {
         pthread_mutex_lock(lock)
         if let item = storage.dict[key] {
             storage.remove(item: item)

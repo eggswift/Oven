@@ -1,0 +1,14 @@
+# YYCache
+git "https://github.com/ibireme/YYCache.git"
+
+# TMCache
+git "https://github.com/tumblr/TMCache.git"
+
+# PINCache
+git "https://github.com/pinterest/PINCache.git"
+
+# Cache
+git "https://github.com/hyperoslo/Cache.git"
+
+# HanekeSwift
+git "https://github.com/Haneke/HanekeSwift.git"
