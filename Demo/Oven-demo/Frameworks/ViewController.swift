@@ -12,7 +12,12 @@ class ViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        Benchmark.memoryCacheBenchmark()
+        var count = 100
+       // for i in 1...10 {
+       //     count = 100 * i
+            Benchmark.memoryCacheBenchmark(count: count, countLimit: 0)
+            print("\n")
+       // }
     }
 
     override func didReceiveMemoryWarning() {

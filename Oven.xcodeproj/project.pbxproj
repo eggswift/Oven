@@ -22,6 +22,8 @@
 		F6A6162B1E83960800244A96 /* Cache.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = F6A616281E83960100244A96 /* Cache.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		F6A6162E1E83985E00244A96 /* CryptoSwift.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6A6162C1E83985A00244A96 /* CryptoSwift.framework */; };
 		F6A6162F1E83985E00244A96 /* CryptoSwift.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = F6A6162C1E83985A00244A96 /* CryptoSwift.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		F6B01E311E863DA9008608B1 /* OvenMemoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6B01E301E863DA9008608B1 /* OvenMemoryTests.swift */; };
+		F6C3D2211E868F3E000CFB69 /* SortsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C3D2201E868F3E000CFB69 /* SortsTests.swift */; };
 		F6E6B6151E80CF5300F2BEE1 /* Oven.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6E6B60B1E80CF5300F2BEE1 /* Oven.framework */; };
 		F6E6B6281E80D00100F2BEE1 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = F6E6B6261E80D00100F2BEE1 /* Info.plist */; };
 		F6E6B6291E80D00100F2BEE1 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = F6E6B6261E80D00100F2BEE1 /* Info.plist */; };
@@ -89,6 +91,9 @@
 		F6A616251E838D0700244A96 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		F6A616281E83960100244A96 /* Cache.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Cache.framework; sourceTree = "<group>"; };
 		F6A6162C1E83985A00244A96 /* CryptoSwift.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = CryptoSwift.framework; sourceTree = "<group>"; };
+		F6B01E301E863DA9008608B1 /* OvenMemoryTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OvenMemoryTests.swift; sourceTree = "<group>"; };
+		F6C3D21F1E8682CC000CFB69 /* Sorts.playground */ = {isa = PBXFileReference; lastKnownFileType = file.playground; path = Sorts.playground; sourceTree = "<group>"; };
+		F6C3D2201E868F3E000CFB69 /* SortsTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SortsTests.swift; sourceTree = "<group>"; };
 		F6E6B60B1E80CF5300F2BEE1 /* Oven.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Oven.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F6E6B6141E80CF5300F2BEE1 /* OvenTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OvenTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F6E6B6261E80D00100F2BEE1 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -175,6 +180,8 @@
 			children = (
 				F6E6B62C1E80D00900F2BEE1 /* Info.plist */,
 				F6E6B62D1E80D00900F2BEE1 /* OvenTests.swift */,
+				F6B01E301E863DA9008608B1 /* OvenMemoryTests.swift */,
+				F6C3D2201E868F3E000CFB69 /* SortsTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -190,6 +197,7 @@
 			isa = PBXGroup;
 			children = (
 				F6E6B6B81E83777C00F2BEE1 /* Oven-demo */,
+				F6C3D21F1E8682CC000CFB69 /* Sorts.playground */,
 			);
 			path = Demo;
 			sourceTree = "<group>";
@@ -383,10 +391,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F6C3D2211E868F3E000CFB69 /* SortsTests.swift in Sources */,
 				F6E6B6381E80D10500F2BEE1 /* Memory.swift in Sources */,
 				F6E6B6351E80D0FB00F2BEE1 /* Disk.swift in Sources */,
 				F6E6B62F1E80D00900F2BEE1 /* OvenTests.swift in Sources */,
 				F6E6B6321E80D0EC00F2BEE1 /* Oven.swift in Sources */,
+				F6B01E311E863DA9008608B1 /* OvenMemoryTests.swift in Sources */,
 				F6E6B63B1E80D10D00F2BEE1 /* Storage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -26,107 +26,92 @@
 
 import UIKit
 
-fileprivate class MemoryStorageItem<KeyType: Equatable>: NSObject {
-    var prev: MemoryStorageItem<KeyType>?
-    var next: MemoryStorageItem<KeyType>?
+internal struct MemoryStorageItem <KeyType: Hashable> {
+    internal var key: KeyType
+    internal var value: Any
+    internal var cost: UInt
+    internal var time: TimeInterval
     
-    var key: KeyType
-    var value: Any
-    
-    var cost: UInt = 0
-    var time: TimeInterval = 0.0
-    
-    init(key: KeyType, value: Any) {
+    internal init(key: KeyType, value: Any, cost: UInt = 0, time: TimeInterval = CACurrentMediaTime()) {
         self.key = key
         self.value = value
+        self.cost = cost
+        self.time = time
     }
-    
-    deinit {}
 }
 
-fileprivate class MemoryStorage<KeyType : Hashable>: NSObject {
+extension MemoryStorageItem : Equatable {
     
-    var dict = [KeyType: MemoryStorageItem<KeyType>]()
-    var totalCost: UInt = 0
-    var totalCount: UInt = 0
-    var head: MemoryStorageItem<KeyType>?
-    var tail: MemoryStorageItem<KeyType>?
- 
-    func insert(atHead item: MemoryStorageItem<KeyType>) {
-        dict[item.key] = item
-        totalCost += item.cost
-        totalCount += 1
-        
-        if head != nil {
-            item.next = head
-            head!.prev = item
-            head = item
-        } else {
-            head = item
-            tail = item
-        }
+    /// Returns a Boolean value indicating whether two values are equal.
+    ///
+    /// Equality is the inverse of inequality. For any values `a` and `b`,
+    /// `a == b` implies that `a != b` is `false`.
+    ///
+    /// - Parameters:
+    ///   - lhs: A value to compare.
+    ///   - rhs: Another value to compare.
+    public static func ==(lhs: MemoryStorageItem<KeyType>, rhs: MemoryStorageItem<KeyType>) -> Bool {
+        return lhs.key == rhs.key
     }
     
-    func bring(toHead item: MemoryStorageItem<KeyType>) {
-        if head == item {
-            return
-        }
-        if tail == item {
-            tail = item.prev
-            tail!.next = nil
-        } else {
-            item.next!.prev = item.prev
-            item.prev!.next = item.next
-        }
-        item.next = head
-        item.prev = nil
-        head!.prev = item
-        head = item
+}
+
+extension MemoryStorageItem : Comparable {
+    
+    /// Returns a Boolean value indicating whether the value of the first
+    /// argument is less than that of the second argument.
+    ///
+    /// This function is the only requirement of the `Comparable` protocol. The
+    /// remainder of the relational operator functions are implemented by the
+    /// standard library for any type that conforms to `Comparable`.
+    ///
+    /// - Parameters:
+    ///   - lhs: A value to compare.
+    ///   - rhs: Another value to compare.
+    public static func <(lhs: MemoryStorageItem<KeyType>, rhs: MemoryStorageItem<KeyType>) -> Bool {
+        return lhs.time < rhs.time
     }
     
-    func remove(item: MemoryStorageItem<KeyType>) {
-        dict[item.key] = nil
-        totalCost = item.cost
-        totalCount -= 1
-        if item.next != nil {
-            item.next!.prev = item.prev
-        }
-        if item.prev != nil {
-            item.prev!.next = item.next
-        }
-        if head == item {
-            head = item.next
-        }
-        if tail == item {
-            tail = item.prev
-        }
+    /// Returns a Boolean value indicating whether the value of the first
+    /// argument is less than or equal to that of the second argument.
+    ///
+    /// - Parameters:
+    ///   - lhs: A value to compare.
+    ///   - rhs: Another value to compare.
+    public static func <=(lhs: MemoryStorageItem<KeyType>, rhs: MemoryStorageItem<KeyType>) -> Bool {
+        return lhs.time <= rhs.time
     }
     
-    func removeTail() -> MemoryStorageItem<KeyType>? {
-        if tail == nil {
-            return nil
-        }
-        let v = tail
-        dict[tail!.key] = nil
-        totalCost -= tail!.cost
-        totalCount -= 1
-        if head == tail {
-            head = nil
-            tail = nil
-        } else {
-            tail = tail!.prev
-            tail!.next = nil
-        }
-        
-        return v
+    /// Returns a Boolean value indicating whether the value of the first
+    /// argument is greater than or equal to that of the second argument.
+    ///
+    /// - Parameters:
+    ///   - lhs: A value to compare.
+    ///   - rhs: Another value to compare.
+    public static func >=(lhs: MemoryStorageItem<KeyType>, rhs: MemoryStorageItem<KeyType>) -> Bool {
+        return lhs.time >= rhs.time
     }
     
-    func removeAll() {
-        totalCost = 0
-        totalCount = 0
-        head = nil
-        tail = nil
-        dict = [KeyType: MemoryStorageItem]()
+    /// Returns a Boolean value indicating whether the value of the first
+    /// argument is greater than that of the second argument.
+    ///
+    /// - Parameters:
+    ///   - lhs: A value to compare.
+    ///   - rhs: Another value to compare.
+    public static func >(lhs: MemoryStorageItem<KeyType>, rhs: MemoryStorageItem<KeyType>) -> Bool {
+        return lhs.time > rhs.time
+    }
+
+}
+
+extension MemoryStorageItem : Hashable {
+    
+    /// The hash value.
+    ///
+    /// Hash values are not guaranteed to be equal across different executions of
+    /// your program. Do not save hash values to use during a future execution.
+    public var hashValue: Int {
+        return key.hashValue
     }
     
 }
@@ -134,190 +119,349 @@ fileprivate class MemoryStorage<KeyType : Hashable>: NSObject {
 
 public typealias MemoryCacheEscapeHandler<KeyType : Hashable> = ((_ : MemoryCache<KeyType>) -> ())
 
-public class MemoryCache <KeyType : Hashable>: NSObject {
+public class MemoryCache <KeyType: Hashable> {
     
     fileprivate var lock = UnsafeMutablePointer<pthread_mutex_t>.allocate(capacity: 1)
-    fileprivate var storage = MemoryStorage<KeyType>()
     fileprivate var queue = DispatchQueue(label: "com.eggswift.cache.memory")
+    fileprivate var storage = Dictionary<KeyType, MemoryStorageItem<KeyType>>()
     
+    ///
+    public var algorithmType: OvenType
+    
+    /// The name of the cache. Default is `<no description>`.
     public let name: String
     
-    public var countLimit: UInt = 1000
+    /// The number of objects in the cache (read-only).
+    public fileprivate(set) var totalCost: UInt = 0
+    /// The total cost of objects in the cache (read-only).
+    public fileprivate(set) var totalCount: UInt = 0
+    
+    /// The maximum number of objects the cache should hold.
+    /// The default value is UInt.max, which means no limit. This is not a strict limit—if the cache goes over the limit, some objects in the cache could be evicted later in backgound thread.
+    public var countLimit: UInt = UInt.max
+    
+    /// The maximum total cost that the cache can hold before it starts evicting objects.
+    /// The default value is UInt.max, which means no limit. This is not a strict limit—if the cache goes over the limit, some objects in the cache could be evicted later in backgound thread.
     public var costLimit: UInt = UInt.max
+    
+    /// The maximum expiry time of objects in cache.
+    /// The default value is Double.greatestFiniteMagnitude, which means no limit. This is not a strict limit—if an object goes over the limit, the object could be evicted later in backgound thread.
     public var ageLimit: TimeInterval = Double.greatestFiniteMagnitude
-    public var autoTrimInterval: TimeInterval = 5.0
     
+    /// The auto trim check time interval in seconds. Default is `20.0`.
+    /// The cache holds an internal timer to check whether the cache reaches its limits, and if the limit is reached, it begins to evict objects.
+    fileprivate var isAutoTriming: Bool = true
+    fileprivate var needCancelAutoTriming: Bool = false
+    public var autoTrimInterval: TimeInterval = 20 {
+        didSet {
+            pthread_mutex_lock(lock)
+            if autoTrimInterval == Double.greatestFiniteMagnitude {
+                if isAutoTriming {
+                    needCancelAutoTriming = true
+                }
+            } else {
+                if !isAutoTriming {
+                    pthread_mutex_unlock(lock)
+                    private_trimRecursively()
+                    return
+                }
+            }
+            pthread_mutex_unlock(lock)
+        }
+    }
+    
+    ///  If `true`, the cache will remove all objects when the app receives a memory warning. The default value is `true`.
     public var shouldRemoveAllObjectsOnMemoryWarning: Bool = true
-    public var shouldRemoveAllObjectsWhenEnteringBackground: Bool = true
-    
+    /// If `true`, The cache will remove all objects when the app enter background. The default value is `false`.
+    public var shouldRemoveAllObjectsWhenEnteringBackground: Bool = false
+
+    /// A block to be executed when the app receives a memory warning. The default value is nil.
     public var didReceiveMemoryWarningBlock: MemoryCacheEscapeHandler<KeyType>?
+    /// A block to be executed when the app enter background. The default value is nil.
     public var didEnterBackgroundBlock: MemoryCacheEscapeHandler<KeyType>?
     
-    public init(name: String = "<no description>") {
+    public init(name: String = "<no description>", algorithmType type: OvenType = .LRU) {
         self.name = name
-        
-        super.init()
-        
+        self.algorithmType = type
         pthread_mutex_init(lock, nil)
         
         NotificationCenter.default.addObserver(self, selector: #selector(appDidReceiveMemoryWarningNotification), name: .UIApplicationDidReceiveMemoryWarning, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(appDidEnterBackgroundNotification), name: .UIApplicationDidEnterBackground, object: nil)
         
-        self.__trimRecursively()
+        self.private_trimRecursively()
     }
     
     deinit {
         NotificationCenter.default.removeObserver(self, name: .UIApplicationDidReceiveMemoryWarning, object: nil)
         NotificationCenter.default.removeObserver(self, name: .UIApplicationDidEnterBackground, object: nil)
-        storage.removeAll()
+        private_removeAll()
         pthread_mutex_destroy(lock)
         lock.deinitialize()
         lock.deallocate(capacity: 1)
     }
     
+    /// Returns a Boolean value that indicates whether a given key is in cache.
+    ///
+    /// - Parameter key: An object identifying the value.
+    /// - Returns: Whether the key is in cache.
     public func contains(forKey key: KeyType) -> Bool {
+        var contains = false
         pthread_mutex_lock(lock)
-        let contains = storage.dict.contains { (k, v) -> Bool in
-            return k == key
+        if let _ = storage.index(forKey: key) {
+            contains = true
         }
         pthread_mutex_unlock(lock)
         
         return contains
     }
     
+    /// Returns the value associated with a given key.
+    ///
+    /// - Parameter key: An object identifying the value. If nil, just return nil.
+    /// - Returns: The value associated with key, or nil if no value is associated with key.
     public func object(forKey key: KeyType) -> Any? {
-        pthread_mutex_lock(lock)
         var object: Any?
-        if let item = storage.dict[key] {
-            item.time = CACurrentMediaTime()
-            storage.bring(toHead: item)
+        pthread_mutex_lock(lock)
+        if var item = storage[key] {
             object = item.value
+            item.time = CACurrentMediaTime()
+            storage.updateValue(item, forKey: key)
         }
         pthread_mutex_unlock(lock)
         
         return object
     }
     
-    
+    /// Sets the value of the specified key in the cache, and associates the key-value pair with the specified cost.
+    ///
+    /// - Parameters:
+    ///   - object: The object to store in the cache. If nil, it calls `remove(_:)`.
+    ///   - key: The key with which to associate the value. If nil, this method has no effect.
+    ///   - cost: The cost with which to associate the key-value pair.
     public func set(object: Any?, forKey key: KeyType, withCost cost: UInt = 0) {
-        guard let object = object else {
-            remove(forKey: key)
+        guard let value = object else {
+            remove(forKey: key) // Remove item safety.
             return
         }
-        
         pthread_mutex_lock(lock)
-        if let item = storage.dict[key] {
-            storage.totalCost -= item.cost
-            storage.totalCost += cost
+        
+        if var item = storage[key] {
+            totalCost -= item.cost
+            
+            item.value = value
             item.cost = cost
             item.time = CACurrentMediaTime()
-            item.value = object
-            storage.bring(toHead: item)
+            
+            storage.updateValue(item, forKey: key)
         } else {
-            let item = MemoryStorageItem.init(key: key, value: object)
-            item.cost = cost
-            item.time = CACurrentMediaTime()
-            storage.insert(atHead: item)
+            storage[key] = MemoryStorageItem.init(key: key, value: value, cost: cost, time: CACurrentMediaTime())
+            totalCost += cost
+            totalCount += 1
         }
         
-        if storage.totalCost > costLimit {
+        if totalCost > costLimit {
             queue.async { [weak self] in
                 guard let weakSelf = self else {
                     return
                 }
-                weakSelf.trim(toCost: weakSelf.costLimit)
+                weakSelf.private_trim(toCost: weakSelf.costLimit)
             }
         }
-        
-        if storage.totalCount > countLimit {
-            let _ = storage.removeTail()
+        if totalCount > countLimit {
+            // 因为是添加一个缓存单元，所以这里删除一个就可以了。
+            private_trim()
         }
         
         pthread_mutex_unlock(lock)
     }
     
-    
+    /// Removes the value of the specified key in the cache.
+    ///
+    /// - Parameter key: The key identifying the value to be removed. If nil, this method has no effect.
     public func remove(forKey key: KeyType) {
         pthread_mutex_lock(lock)
-        if let item = storage.dict[key] {
-            storage.remove(item: item)
+        if let item = storage[key] {
+            totalCost -= item.cost
+            totalCount -= 1
+            storage.removeValue(forKey: key)
         }
         
         pthread_mutex_unlock(lock)
     }
-
+    
+    /// Clear cache safety.
     public func removeAll() {
         pthread_mutex_lock(lock)
-        storage.removeAll()
+        private_removeAll()
         pthread_mutex_unlock(lock)
     }
     
-
-    // MARK: - Trim
     
+    // MARK: - Trim
+
+    /// Removes objects from the cache with giving deadline.
+    ///
+    /// - Parameter dateLimit: The deadline (in seconds).
+    public func trim(toDate dateLimit: Date) {
+        let ageLimit = Date().timeIntervalSince(dateLimit)
+        private_trim(toAge: ageLimit)
+    }
+    
+    /// Removes objects from the cache with LRU, until the `totalCount` is below or equal to the specified value.
+    ///
+    /// - Parameter count: The total count allowed to remain after the cache has been trimmed.
     public func trim(toCount count: UInt) {
-        guard count > 0 else {
-            removeAll()
-            return
+        private_trim(toCount: count)
+    }
+    
+    /// Removes objects from the cache with LRU, until the `totalCost` is or equal to the specified value.
+    ///
+    /// - Parameter cost: The total cost allowed to remain after the cache has been trimmed.
+    public func trim(toCost cost: UInt) {
+        private_trim(toCost: cost)
+    }
+    
+    /// Removes objects from the cache with LRU, until all expiry objects removed by the specified value.
+    ///
+    /// - Parameter age: The maximum age (in seconds) of objects.
+    public func trim(toDate date: TimeInterval) {
+        private_trim(toAge: date)
+    }
+    
+    
+    // MARK: - Notification
+    
+    @objc func appDidReceiveMemoryWarningNotification() {
+        if let didReceiveMemoryWarningBlock = didReceiveMemoryWarningBlock {
+            didReceiveMemoryWarningBlock(self)
+        }
+        if shouldRemoveAllObjectsOnMemoryWarning {
+            removeAll() // Clear cache, safety.
+        }
+    }
+    
+    @objc func appDidEnterBackgroundNotification() {
+        if let didEnterBackgroundBlock = didEnterBackgroundBlock {
+            didEnterBackgroundBlock(self)
+        }
+        if shouldRemoveAllObjectsWhenEnteringBackground {
+            removeAll() // Clear cache, safety.
+        }
+    }
+    
+}
+
+
+
+fileprivate extension MemoryCache /* Private */ {
+    
+    /// Returns item that the most should be deleted.
+    /// Attention: This function in the process of execution is not locked, but the other functions that call this function implements the lock, so it is safe.
+    /// 返回当前最应该删除的缓存单元
+    /// 注意：这个函数在执行时内部并不会加锁，但是在`MemoryCache`中的其他函数调用该函数时都会加锁，所以它是安全的。
+    @discardableResult fileprivate func private_needTrim() -> MemoryStorageItem<KeyType>? {
+        var item: MemoryStorageItem<KeyType>?
+        switch algorithmType {
+        case .LRU:
+            item = private_needTrimLRU()
+        default: break
         }
         
-        __trim(toCount: count)
+        return item
     }
     
-    public func trim(toCost cost: UInt) {
-        __trim(toCost: cost)
+    @discardableResult fileprivate func private_needTrimLRU() -> MemoryStorageItem<KeyType>? {
+        var output: MemoryStorageItem<KeyType>?
+        if let value = (storage.sorted { return $1.value.time < $0.value.time }.last?.value) {
+            output = value
+        }
+        
+        return output
     }
     
-    public func trim(toAge age: TimeInterval) {
-        __trim(toAge: age)
+    /// Trim an item by algorithm
+    /// Attention: This function in the process of execution is not locked, but the other functions that call this function implements the lock, so it is safe.
+    /// 裁剪一个缓存单元
+    /// 注意：这个函数在执行时内部并不会加锁，但是在`MemoryCache`中的其他函数调用该函数时都会加锁，所以它是安全的。
+    fileprivate func private_trim() {
+        switch algorithmType {
+        case .LRU:
+            private_trimLRU()
+        default: break
+        }
     }
     
-    public func totalCount() -> UInt {
+    fileprivate func private_trimLRU() {
+        if let value = (storage.sorted { return $1.value.time < $0.value.time }.last?.value) {
+            totalCount -= 1
+            totalCost -= value.cost
+            storage.removeValue(forKey: value.key)
+        }
+    }
+    
+    /**
+     Clean all data and reset statistics property.
+     Attention: This function in the process of execution is not locked, but the other functions that call this function implements the lock, so it is safe.
+     清除所有缓存单元并重置统计属性
+     注意：这个函数在执行时内部并不会加锁，但是在`MemoryCache`中的其他函数调用该函数时都会加锁，所以它是安全的。
+     */
+    fileprivate func private_removeAll() {
+        totalCost = 0
+        totalCount = 0
+        storage.removeAll(keepingCapacity: true)
+    }
+    
+    /**
+     Create a dispatch delay and auto trim in background.
+     Delay autoTrimInterval seconds.
+     创建一个GCD延迟任务，并在后台对缓存自动裁剪。
+     延迟`autoTrimInterval`秒
+     */
+    fileprivate func private_trimRecursively() {
+        /// Check whether Memory need to continue to loop.
+        /// 检查当前是否继续执行。
         pthread_mutex_lock(lock)
-        let totalCount = storage.totalCount
-        pthread_mutex_unlock(lock)
-        return totalCount
-    }
-    
-    public func totalCost() -> UInt {
-        pthread_mutex_lock(lock)
-        let totalCost = storage.totalCost
-        pthread_mutex_unlock(lock)
-        return totalCost
-    }
-    
-    
-    fileprivate func __trimRecursively() {
-        let minseconds = autoTrimInterval * Double(NSEC_PER_SEC)
-        let dtime = DispatchTime.now() + Double(Int64(minseconds)) / Double(NSEC_PER_SEC)
+        if needCancelAutoTriming == true {
+            needCancelAutoTriming = false
+            isAutoTriming = false
+            pthread_mutex_unlock(lock)
+            return
+        }
+        /// Schedule trim recursively
+        /// 循环定时裁剪
+        let dtime = DispatchTime.now() + autoTrimInterval
         DispatchQueue.main.asyncAfter(deadline: dtime, execute: { [weak self] in
             guard let weakSelf = self else {
                 return
             }
-            weakSelf.__trimInBackground()
-            weakSelf.__trimRecursively()
+            weakSelf.private_trimInBackground()
+            weakSelf.private_trimRecursively()
         })
+        
+        pthread_mutex_unlock(lock)
     }
     
-    fileprivate func __trimInBackground() {
+    /**
+     Trim in background according to cost & count & time by LRU.
+     */
+    fileprivate func private_trimInBackground() {
         queue.async { [weak self] in
             guard let weakSelf = self else {
                 return
             }
-            weakSelf.__trim(toCost: weakSelf.costLimit)
-            weakSelf.__trim(toCount: weakSelf.countLimit)
-            weakSelf.__trim(toAge: weakSelf.ageLimit)
+            weakSelf.private_trim(toCost: weakSelf.costLimit)
+            weakSelf.private_trim(toCount: weakSelf.countLimit)
+            weakSelf.private_trim(toAge: weakSelf.ageLimit)
         }
     }
     
-    fileprivate func __trim(toCost cost: UInt) {
+    fileprivate func private_trim(toCost costLimit: UInt) {
         var finish = false
         pthread_mutex_lock(lock)
         if costLimit == 0 {
-            storage.removeAll()
+            private_removeAll()
             finish = true
-        }
-        else if storage.totalCost <= costLimit {
+        } else if totalCost <= costLimit {
             finish = true
         }
         pthread_mutex_unlock(lock)
@@ -326,8 +470,8 @@ public class MemoryCache <KeyType : Hashable>: NSObject {
         
         while !finish {
             if pthread_mutex_trylock(lock) == 0 {
-                if storage.totalCost > costLimit {
-                    let _ = storage.removeTail()
+                if totalCost > costLimit {
+                    private_trim()
                 } else {
                     finish = true
                 }
@@ -338,14 +482,13 @@ public class MemoryCache <KeyType : Hashable>: NSObject {
         }
     }
     
-    fileprivate func __trim(toCount count: UInt) {
+    fileprivate func private_trim(toCount countLimit: UInt) {
         var finish = false
         pthread_mutex_lock(lock)
         if countLimit == 0 {
-            storage.removeAll()
+            private_removeAll()
             finish = true
-        }
-        else if storage.totalCount <= countLimit {
+        } else if totalCount <= countLimit {
             finish = true
         }
         pthread_mutex_unlock(lock)
@@ -354,8 +497,8 @@ public class MemoryCache <KeyType : Hashable>: NSObject {
         
         while !finish {
             if pthread_mutex_trylock(lock) == 0 {
-                if storage.totalCount > countLimit {
-                    let _ = storage.removeTail()
+                if totalCount > countLimit {
+                    private_trim()
                 } else {
                     finish = true
                 }
@@ -366,21 +509,25 @@ public class MemoryCache <KeyType : Hashable>: NSObject {
         }
     }
     
-    fileprivate func __trim(toAge age: TimeInterval) {
+    fileprivate func private_trim(toDate dateLimit: Date) {
+        let ageLimit = Date().timeIntervalSince(dateLimit)
+        private_trim(toAge: ageLimit)
+    }
+    
+    fileprivate func private_trim(toAge ageLimit: TimeInterval) {
         var finish = false
         let now = CACurrentMediaTime()
         pthread_mutex_lock(lock)
-        
         if ageLimit <= 0.0 {
-            storage.removeAll()
+            private_removeAll()
             finish = true
         } else {
-            if let last = storage.tail {
-                if (now - last.time) <= ageLimit {
+            if let time = private_needTrim()?.time {
+                if (now - time) <= ageLimit {
                     finish = true
                 }
             } else {
-                // Empty
+                // If empty.
                 finish = true
             }
         }
@@ -390,8 +537,15 @@ public class MemoryCache <KeyType : Hashable>: NSObject {
         
         while !finish {
             if pthread_mutex_trylock(lock) == 0 {
-                if let last = storage.tail, (now - last.time) > ageLimit {
-                    let _ = storage.removeTail()
+                if let item = private_needTrim() {
+                    let time = item.time
+                    if (now - time) > ageLimit {
+                        totalCount -= 1
+                        totalCost -= item.cost
+                        storage.removeValue(forKey: item.key)
+                    } else {
+                        finish = true
+                    }
                 } else {
                     finish = true
                 }
@@ -402,24 +556,4 @@ public class MemoryCache <KeyType : Hashable>: NSObject {
         }
     }
     
-    // MARK: - Notification
-    
-    @objc func appDidReceiveMemoryWarningNotification() {
-        if let didReceiveMemoryWarningBlock = didReceiveMemoryWarningBlock {
-            didReceiveMemoryWarningBlock(self)
-        }
-        if shouldRemoveAllObjectsOnMemoryWarning {
-            removeAll()
-        }
-    }
-    
-    @objc func appDidEnterBackgroundNotification() {
-        if let didEnterBackgroundBlock = didEnterBackgroundBlock {
-            didEnterBackgroundBlock(self)
-        }
-        if shouldRemoveAllObjectsWhenEnteringBackground {
-            removeAll()
-        }
-    }
-
 }
